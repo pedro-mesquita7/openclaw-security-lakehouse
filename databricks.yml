@@ -1,0 +1,41 @@
+# Databricks Asset Bundle configuration for OpenClaw Security Intelligence Lakehouse
+# Documentation: https://docs.databricks.com/dev-tools/bundles/
+#
+# Authentication comes from the environment (DATABRICKS_HOST / DATABRICKS_TOKEN)
+# or from a profile in ~/.databrickscfg. Jobs run on serverless compute, so the
+# bundle works on Databricks Free Edition without any cluster configuration.
+
+bundle:
+  name: openclaw-security-lakehouse
+
+# Variable definitions for environment-specific configuration
+variables:
+  catalog:
+    description: Unity Catalog name
+    default: main
+  schema:
+    description: Schema/database name
+    default: openclaw_security
+
+# Include job definitions
+include:
+  - resources/jobs/*.yml
+
+# Target environments
+targets:
+  # Development: resources are prefixed per user and schedules stay paused
+  dev:
+    mode: development
+    default: true
+    variables:
+      catalog: main
+      schema: openclaw_security_dev
+
+  # Production: in a team setup, add a run_as service principal here
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: main
+      schema: openclaw_security

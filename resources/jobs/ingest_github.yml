@@ -1,0 +1,43 @@
+# Databricks Asset Bundle job definition
+# GitHub Events Ingestion Job
+
+resources:
+  jobs:
+    ingest_github:
+      name: "[${bundle.target}] OpenClaw - Ingest GitHub Events"
+      description: |
+        Daily ingestion of GitHub repository data for OpenClaw:
+        - Repository metadata (stars, forks, watchers)
+        - Issues and PRs (including security-tagged)
+        - Releases
+        - Contributors
+
+        Uses shared API clients from src/utils/api_clients.py with
+        rate limit handling and retry logic.
+
+      # Schedule: Daily at 6 AM UTC
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED  # Paused by default for free tier
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+
+      tags:
+        project: openclaw-security
+        layer: bronze
+        source: github
+
+      tasks:
+        - task_key: ingest_github_events
+          description: Fetch and store GitHub API data
+          notebook_task:
+            notebook_path: ../../notebooks/02_ingest_github.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          timeout_seconds: 1800
+          retry_on_timeout: true
+          max_retries: 2

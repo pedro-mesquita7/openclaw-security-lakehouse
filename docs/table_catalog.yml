@@ -1,0 +1,94 @@
+# Table catalog reference (documentation only, not deployed by the bundle).
+# Tables are created by the notebooks in notebooks/.
+
+# Note: Databricks Free Edition may not have Unity Catalog.
+# In that case, use hive_metastore as the catalog.
+
+schemas:
+  # Development schema
+  openclaw_security_dev:
+    catalog: main
+    comment: "Development environment for OpenClaw Security Lakehouse"
+    properties:
+      environment: dev
+      owner: data-engineering
+
+  # Production schema
+  openclaw_security:
+    catalog: main
+    comment: "Production OpenClaw Security Intelligence Lakehouse"
+    properties:
+      environment: prod
+      owner: data-engineering
+
+# Table documentation (for reference)
+tables:
+  # Bronze Layer
+  bronze:
+    github_repository_raw:
+      description: "Raw GitHub repository metadata snapshots"
+      partition_columns: [ingestion_date]
+      retention_days: 365
+
+    github_issues_raw:
+      description: "Raw GitHub issues and PRs"
+      partition_columns: [ingestion_date]
+      retention_days: 365
+
+    github_releases_raw:
+      description: "Raw GitHub release data"
+      partition_columns: [ingestion_date]
+      retention_days: 365
+
+    github_events_raw:
+      description: "Raw GitHub repository events"
+      partition_columns: [ingestion_date]
+      retention_days: 90
+
+    github_contributors_raw:
+      description: "Raw GitHub contributor data"
+      partition_columns: [ingestion_date]
+      retention_days: 365
+
+    cve_raw:
+      description: "Raw CVE records from NVD"
+      partition_columns: [ingestion_date]
+      retention_days: 365
+
+    packages_raw:
+      description: "Raw package registry snapshots"
+      partition_columns: [ingestion_date]
+      retention_days: 365
+
+  # Silver Layer
+  silver:
+    packages:
+      description: "Cleaned package metadata"
+      primary_key: package_id
+
+    packages_scd:
+      description: "SCD Type 2 package history"
+      primary_key: [package_id, valid_from]
+
+    cve_details:
+      description: "Structured CVE records"
+      primary_key: cve_id
+
+
+  # Gold Layer
+  gold:
+    daily_security_summary:
+      description: "Daily security metrics rollup"
+      primary_key: summary_date
+
+    package_risk_scores:
+      description: "Package risk assessments"
+      primary_key: package_id
+
+    vulnerability_timeline:
+      description: "CVE lifecycle tracking"
+      primary_key: cve_id
+
+    suspicious_packages:
+      description: "Packages flagged for review"
+      primary_key: package_id

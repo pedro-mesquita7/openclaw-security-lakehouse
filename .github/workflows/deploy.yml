@@ -1,0 +1,78 @@
+# Deployment workflow
+# Deploys the Asset Bundle to Databricks on merge to main (once credentials are configured)
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deployment target"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  # The Databricks CLI authenticates from these variables directly
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  TARGET: ${{ github.event.inputs.target || 'dev' }}
+
+jobs:
+  deploy:
+    name: Deploy to Databricks
+    runs-on: ubuntu-latest
+    # Skipped until the repo variable DATABRICKS_CONFIGURED is set to 'true'
+    if: ${{ vars.DATABRICKS_CONFIGURED == 'true' }}
+
+    environment:
+      name: ${{ github.event.inputs.target || 'dev' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Validate bundle
+        run: databricks bundle validate --target "$TARGET"
+
+      - name: Deploy bundle
+        run: databricks bundle deploy --target "$TARGET"
+
+      - name: Show deployment summary
+        run: |
+          {
+            echo "## Deployment Summary"
+            echo ""
+            echo "- **Target:** $TARGET"
+            echo "- **Commit:** ${{ github.sha }}"
+            echo ""
+            echo "### Jobs Deployed"
+            echo "- daily_refresh (full Bronze → Silver → Gold DAG)"
+            echo "- ingest_github"
+            echo "- ingest_cve"
+            echo "- ingest_packages"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Optional: verify the jobs exist after deployment
+  smoke-test:
+    name: Smoke Test
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: ${{ vars.RUN_SMOKE_TESTS == 'true' }}
+
+    steps:
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Verify jobs exist
+        run: |
+          databricks jobs list --output json | jq -r '.[].settings.name' | grep -q "OpenClaw"
+          echo "Smoke test passed: Jobs are deployed"

@@ -1,0 +1,98 @@
+# Databricks Asset Bundle job definition
+# Full Pipeline Daily Refresh Job
+
+resources:
+  jobs:
+    daily_refresh:
+      name: "[${bundle.target}] OpenClaw - Daily Security Refresh"
+      description: |
+        Complete daily refresh of the security lakehouse:
+
+        Bronze Layer (Ingestion):
+        1. GitHub repository data (stars, issues, releases)
+        2. CVE vulnerability data from NVD
+        3. Package registry snapshot
+
+        Silver Layer (Transformation):
+        4. Package risk analysis with SCD Type 2 history
+        5. CVE details with severity classification
+        6. GitHub metrics and issue analysis
+
+        Gold Layer (Analytics):
+        7. Security scores and aggregations
+
+        This job orchestrates the full medallion architecture pipeline.
+
+      # Schedule: Daily at 6 AM UTC
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED  # Enable when ready for production
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+        on_success:
+          - ${workspace.current_user.userName}
+
+      tags:
+        project: openclaw-security
+        pipeline: full-refresh
+        layer: all
+
+      # Task DAG - Medallion Architecture Pipeline
+      tasks:
+        # ========== BRONZE LAYER (Parallel Ingestion) ==========
+        - task_key: bronze_github
+          description: Ingest GitHub repository data
+          notebook_task:
+            notebook_path: ../../notebooks/02_ingest_github.py
+          timeout_seconds: 1800
+
+        - task_key: bronze_cve
+          description: Ingest CVE vulnerability data
+          notebook_task:
+            notebook_path: ../../notebooks/03_ingest_cve.py
+          timeout_seconds: 1800
+
+        - task_key: bronze_packages
+          description: Ingest package registry data
+          notebook_task:
+            notebook_path: ../../notebooks/04_ingest_packages.py
+          timeout_seconds: 1800
+
+        # ========== SILVER LAYER (Transform after Bronze) ==========
+        - task_key: silver_packages
+          description: Transform packages with risk flags and SCD Type 2
+          depends_on:
+            - task_key: bronze_packages
+          notebook_task:
+            notebook_path: ../../notebooks/05_silver_packages.py
+          timeout_seconds: 1800
+
+        - task_key: silver_cve
+          description: Transform CVE records
+          depends_on:
+            - task_key: bronze_cve
+          notebook_task:
+            notebook_path: ../../notebooks/06_silver_cve.py
+          timeout_seconds: 1800
+
+        - task_key: silver_github
+          description: Transform GitHub metrics
+          depends_on:
+            - task_key: bronze_github
+          notebook_task:
+            notebook_path: ../../notebooks/07_silver_github.py
+          timeout_seconds: 1800
+
+        # ========== GOLD LAYER (Aggregate after all Silver) ==========
+        - task_key: gold_aggregations
+          description: Build security analytics and scores
+          depends_on:
+            - task_key: silver_packages
+            - task_key: silver_cve
+            - task_key: silver_github
+          notebook_task:
+            notebook_path: ../../notebooks/08_gold_aggregations.py
+          timeout_seconds: 1800

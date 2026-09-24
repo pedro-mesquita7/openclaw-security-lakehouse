@@ -1,0 +1,42 @@
+# Databricks Asset Bundle job definition
+# Package Registry Ingestion Job
+
+resources:
+  jobs:
+    ingest_packages:
+      name: "[${bundle.target}] OpenClaw - Ingest Package Registry"
+      description: |
+        Daily snapshot of the OpenClaw package registry:
+        - Package metadata (name, publisher, description)
+        - Download counts and version history
+        - Used for detecting malicious packages
+
+        Note: Uses synthetic data generator for demo purposes.
+        In production, would connect to actual package registry API.
+
+      # Schedule: Daily at 8 AM UTC
+      schedule:
+        quartz_cron_expression: "0 0 8 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+
+      tags:
+        project: openclaw-security
+        layer: bronze
+        source: package-registry
+
+      tasks:
+        - task_key: ingest_packages
+          description: Fetch package registry snapshot
+          notebook_task:
+            notebook_path: ../../notebooks/04_ingest_packages.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          timeout_seconds: 1800
+          retry_on_timeout: true
+          max_retries: 2

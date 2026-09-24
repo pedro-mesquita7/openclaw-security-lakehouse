@@ -1,0 +1,17 @@
+services:
+  dev:
+    build: .
+    container_name: openclaw-lakehouse-dev
+    volumes:
+      # Mount project directory for live editing
+      - .:/app
+      # Persist Databricks CLI config in a directory
+      - databricks-config:/root/.databricks
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+volumes:
+  databricks-config:

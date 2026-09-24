@@ -1,0 +1,42 @@
+# Databricks Asset Bundle job definition
+# CVE Database Ingestion Job
+
+resources:
+  jobs:
+    ingest_cve:
+      name: "[${bundle.target}] OpenClaw - Ingest CVE Data"
+      description: |
+        Daily ingestion of vulnerability data from NVD:
+        - Known security CVEs
+        - Search for AI/agent-related CVEs
+        - Recent high-severity CVEs for context
+
+        Uses shared API clients from src/utils/api_clients.py with
+        automatic rate limiting (5 req/30s without key).
+
+      # Schedule: Daily at 7 AM UTC (after GitHub ingestion)
+      schedule:
+        quartz_cron_expression: "0 0 7 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+
+      tags:
+        project: openclaw-security
+        layer: bronze
+        source: nvd
+
+      tasks:
+        - task_key: ingest_cve
+          description: Fetch CVE data from NVD API
+          notebook_task:
+            notebook_path: ../../notebooks/03_ingest_cve.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          timeout_seconds: 1800
+          retry_on_timeout: true
+          max_retries: 2

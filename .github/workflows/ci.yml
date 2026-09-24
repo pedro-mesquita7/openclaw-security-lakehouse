@@ -1,0 +1,93 @@
+# Continuous Integration workflow
+# Runs on every PR and push to main
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Ruff linter
+        run: |
+          ruff check src/ tests/ --output-format=github
+
+      - name: Run Ruff formatter check
+        run: |
+          ruff format --check src/ tests/
+
+      - name: Run type checking with mypy
+        run: |
+          mypy src/ --ignore-missing-imports
+
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ -v --tb=short --junitxml=test-results.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results.xml
+
+  validate-bundle:
+    name: Validate DAB
+    runs-on: ubuntu-latest
+    # Only run on PRs or when merging to main
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Full `databricks bundle validate` needs workspace credentials, so it runs in
+      # the Deploy workflow. Here we check YAML syntax and that every task's notebook exists.
+      - name: Validate bundle YAML and notebook paths
+        run: |
+          pip install pyyaml
+          python - <<'EOF'
+          import glob, os, sys, yaml
+
+          yaml.safe_load(open("databricks.yml"))
+          missing = []
+          for path in glob.glob("resources/jobs/*.yml"):
+              jobs = yaml.safe_load(open(path))["resources"]["jobs"]
+              for job in jobs.values():
+                  for task in job["tasks"]:
+                      nb = task.get("notebook_task", {}).get("notebook_path")
+                      if nb and not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(path), nb))):
+                          missing.append(f"{path}: {task['task_key']} -> {nb}")
+          if missing:
+              sys.exit("Missing notebooks:\n" + "\n".join(missing))
+          print("Bundle YAML valid, all notebook paths resolve")
+          EOF
